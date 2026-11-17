@@ -29,6 +29,7 @@ class Comment(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    profile_picture: Mapped[str | None] = mapped_column(Text, nullable=True)
     sentiment: Mapped[Sentiment] = mapped_column(Enum(Sentiment), nullable=False, default=Sentiment.unknown)
     sentiment_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[CommentStatus] = mapped_column(Enum(CommentStatus), nullable=False, default=CommentStatus.pending)

@@ -1,0 +1,28 @@
+# Python bytecode and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Test, type-checker, and coverage output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local databases and uploaded media
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+
+# Downloaded model and tooling caches
+model_cache/
+.cache/

@@ -1,3 +1,6 @@
+import base64
+import binascii
+import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -15,6 +18,18 @@ def submit_comment(payload: CommentCreate, db: Session = Depends(get_db)):
     message = payload.message.strip()
     if not name or len(message) < 2:
         raise HTTPException(status_code=422, detail="Please provide a name and a message.")
+
+    profile_picture = payload.profile_picture
+    if profile_picture:
+        match = re.fullmatch(r"data:(image/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+/]+={0,2})", profile_picture)
+        if not match:
+            raise HTTPException(status_code=422, detail="Please upload a JPG, PNG, GIF, or WebP profile picture.")
+        try:
+            image_bytes = base64.b64decode(match.group(2), validate=True)
+        except binascii.Error:
+            raise HTTPException(status_code=422, detail="The profile picture could not be read.") from None
+        if len(image_bytes) > 2 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="The profile picture must be 2 MB or smaller.")
 
     # A service/model outage must not silently publish an unscored comment.
     # Keep it pending with unknown sentiment and let the admin review it.
@@ -34,6 +49,7 @@ def submit_comment(payload: CommentCreate, db: Session = Depends(get_db)):
     comment = Comment(
         name=name,
         message=message,
+        profile_picture=profile_picture,
         sentiment=sentiment,
         sentiment_score=score,
         status=status_value,

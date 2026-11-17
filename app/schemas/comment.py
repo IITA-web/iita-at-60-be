@@ -6,6 +6,7 @@ from app.models.comment import CommentStatus, Sentiment
 class CommentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     message: str = Field(min_length=2, max_length=2000)
+    profile_picture: str | None = Field(default=None, max_length=3_000_000)
 
 
 class CommentSubmitResponse(BaseModel):
@@ -18,6 +19,7 @@ class PublicCommentOut(BaseModel):
     id: str
     name: str
     message: str
+    profile_picture: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
