@@ -1,14 +1,11 @@
-import base64
-import binascii
 import uuid
-import re
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.comment import Comment, CommentStatus, Sentiment
-from app.schemas.comment import CommentCreate, CommentSubmitResponse, PageOut, PublicCommentOut
+from app.schemas.comment import CommentSubmitResponse, PageOut, PublicCommentOut
 from app.services.sentiment import get_sentiment_service
 from app.core.config import settings
 
@@ -16,32 +13,39 @@ router = APIRouter(prefix="/api/v1/comments", tags=["Public comments"])
 
 
 @router.post("", response_model=CommentSubmitResponse, status_code=201)
-def submit_comment(payload: CommentCreate, db: Session = Depends(get_db)):
-    name = payload.name.strip()
-    message = payload.message.strip()
+async def submit_comment(
+    name: str = Form(min_length=1, max_length=100),
+    message: str = Form(min_length=2, max_length=2000),
+    profile_picture: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+):
+    name = name.strip()
+    message = message.strip()
     if not name or len(message) < 2:
         raise HTTPException(status_code=422, detail="Please provide a name and a message.")
 
-    profile_picture = payload.profile_picture
-    if profile_picture:
-        match = re.fullmatch(r"data:(image/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+/]+={0,2})", profile_picture)
-        if not match:
+    profile_picture_url = None
+    if profile_picture and profile_picture.filename:
+        extensions = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}
+        extension = extensions.get(profile_picture.content_type or "")
+        if not extension:
             raise HTTPException(status_code=422, detail="Please upload a JPG, PNG, GIF, or WebP profile picture.")
-        try:
-            image_bytes = base64.b64decode(match.group(2), validate=True)
-        except binascii.Error:
-            raise HTTPException(status_code=422, detail="The profile picture could not be read.") from None
+        image_bytes = await profile_picture.read(2 * 1024 * 1024 + 1)
         if len(image_bytes) > 2 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="The profile picture must be 2 MB or smaller.")
-        extension = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}[match.group(1)]
         upload_dir = Path(settings.upload_dir)
-        upload_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            upload_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail="The profile picture storage directory is unavailable.") from exc
         filename = f"{uuid.uuid4().hex}{extension}"
         try:
             (upload_dir / filename).write_bytes(image_bytes)
         except OSError as exc:
             raise HTTPException(status_code=500, detail="The profile picture could not be saved.") from exc
-        profile_picture = f"/uploads/{filename}"
+        profile_picture_url = f"/uploads/{filename}"
+    if profile_picture:
+        await profile_picture.close()
 
     # A service/model outage must not silently publish an unscored comment.
     # Keep it pending with unknown sentiment and let the admin review it.
@@ -61,7 +65,7 @@ def submit_comment(payload: CommentCreate, db: Session = Depends(get_db)):
     comment = Comment(
         name=name,
         message=message,
-        profile_picture=profile_picture,
+        profile_picture=profile_picture_url,
         sentiment=sentiment,
         sentiment_score=score,
         status=status_value,
