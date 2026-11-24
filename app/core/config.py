@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     sentiment_model: str = "distilbert-base-uncased-finetuned-sst-2-english"
     sentiment_neutral_band: float = 0.15
+    upload_dir: str = "uploads"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

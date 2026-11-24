@@ -1,6 +1,8 @@
 import base64
 import binascii
+import uuid
 import re
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -8,6 +10,7 @@ from app.db.session import get_db
 from app.models.comment import Comment, CommentStatus, Sentiment
 from app.schemas.comment import CommentCreate, CommentSubmitResponse, PageOut, PublicCommentOut
 from app.services.sentiment import get_sentiment_service
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/v1/comments", tags=["Public comments"])
 
@@ -30,6 +33,15 @@ def submit_comment(payload: CommentCreate, db: Session = Depends(get_db)):
             raise HTTPException(status_code=422, detail="The profile picture could not be read.") from None
         if len(image_bytes) > 2 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="The profile picture must be 2 MB or smaller.")
+        extension = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}[match.group(1)]
+        upload_dir = Path(settings.upload_dir)
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{extension}"
+        try:
+            (upload_dir / filename).write_bytes(image_bytes)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail="The profile picture could not be saved.") from exc
+        profile_picture = f"/uploads/{filename}"
 
     # A service/model outage must not silently publish an unscored comment.
     # Keep it pending with unknown sentiment and let the admin review it.
